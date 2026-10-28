@@ -90,3 +90,13 @@ Eventos útiles:
 La respuesta incluye `requestId` en errores y el header `X-CERCA-Request-ID` para correlacionar con el dispositivo.
 
 Un `PING` exitoso desde PowerShell demuestra que **esa máquina** llega a Upstash, pero no que el despliegue actual de Vercel tenga las mismas variables. Nunca pegues tokens, audios ni respuestas completas de usuario en logs o tickets.
+
+## Calidad de respuestas y transcripciones
+
+Si OpenRouter devuelve texto como `User Safety: safe` / `Response Safety: safe`, la API ahora **rechaza la respuesta** con `code: non_conversational_model` (HTTP 502) en lugar de reproducirla o guardarla. `openrouter/free` elige modelos aleatoriamente y puede seleccionar uno especializado en moderación.
+
+Para conversaciones estables, configura `OPENROUTER_MODEL` con el **identificador exacto de un modelo gratuito de chat**, disponible en [el catálogo de OpenRouter](https://openrouter.ai/models?pricing=free). Evita modelos cuyo nombre contenga `content-safety`, `moderation` o `rerank`.
+
+Groq recibirá el idioma configurado por la persona (`es` o `en`) y una indicación breve del contexto lingüístico. Esto reduce detecciones erróneas de idioma, pero no garantiza una transcripción perfecta.
+
+Nunca imprimas el contenido de los mensajes en logs de producción. Los diagnósticos muestran únicamente códigos, tamaños y modelo seleccionado. La app filtra las etiquetas antiguas del contexto; pueden borrarse manualmente desde Settings.

@@ -1,10 +1,16 @@
 'use strict';
 const { ApiError, text } = require('./guard.cjs');
 
-async function transcribe(audio, { env = process.env, fetchFn = fetch } = {}) {
+async function transcribe(audio, { env = process.env, fetchFn = fetch, language } = {}) {
   if (!env.GROQ_API_KEY) throw new ApiError(503, 'missing_groq_key', 'Configura GROQ_API_KEY en el servidor.');
   const form = new FormData();
   form.append('model', env.GROQ_WHISPER_MODEL || 'whisper-large-v3-turbo');
+  if (language === 'es' || language === 'en') {
+    form.append('language', language);
+    form.append('prompt', language === 'es'
+      ? 'Conversación informal en español latinoamericano.'
+      : 'Casual conversation in English.');
+  }
   form.append('file', new Blob([audio], { type: 'audio/mp4' }), 'voice.m4a');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);

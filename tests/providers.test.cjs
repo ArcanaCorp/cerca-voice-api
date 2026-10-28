@@ -35,7 +35,7 @@ test('Groq transcribe y OpenRouter responde con el contrato CERCA',async()=>{
   assert.ok(calls[0].url.includes('groq.com'));
   assert.ok(calls[1].url.includes('openrouter.ai'));
   const request=JSON.parse(calls[1].opts.body);
-  assert.equal(request.model,'openrouter/free');
+  assert.equal(request.model,'google/gemma-4-31b-it:free');
   assert.ok(request.messages[0].content.includes('Nico'));
   assert.equal(request.messages.at(-1).content,'Recuerda que me gusta el té verde');
 });
@@ -195,4 +195,46 @@ test('puede responder en formato JSON aunque el modo texto natural esté habilit
   }, { env, fetchFn });
   assert.equal(result.reply, 'Claro, cuéntame.');
   assert.equal(result.memory, 'Le gusta el té');
+});
+
+test('rechaza etiquetas de seguridad del router gratis', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{message:{content:'User Safety: safe\\nResponse Safety: safe'}}]
+    })
+  });
+  await assert.rejects(
+    () => requestJSON({system:'CERCA',messages:[],allowPlainText:true},{env,fetchFn}),
+    e => e.code === 'non_conversational_model'
+  );
+});
+
+test('rechaza modelos de moderacion del router incluso con texto', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      model: 'nvidia/nemotron-content-safety:free',
+      choices: [{message:{content:'safe'}}]
+    })
+  });
+  await assert.rejects(
+    () => requestJSON({system:'CERCA',messages:[],allowPlainText:true},{env,fetchFn}),
+    e => e.code === 'non_conversational_model'
+  );
+});
+
+test('transcripcion de Groq usa el idioma seleccionado', async () => {
+  const fetchFn = async (url, opts) => {
+    if (url.includes('groq.com')) {
+      assert.equal(opts.body.get('language'), 'es');
+      assert.ok(opts.body.get('prompt').includes('español'));
+      return {ok:true,json:async()=>({text:'Hola Clara, ¿cómo estás?'})};
+    }
+    return {ok:true,json:async()=>({
+      choices:[{message:{content:'{"reply":"¡Bien!","memory":""}'}}]
+    })};
+  };
+  const result = await voiceTurn(input(), {env,fetchFn});
+  assert.equal(result.transcript, 'Hola Clara, ¿cómo estás?');
 });
