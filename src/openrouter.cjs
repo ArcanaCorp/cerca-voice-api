@@ -105,7 +105,7 @@ async function requestJSON(
 
   try {
     const payload = {
-      model: env.OPENROUTER_MODEL || 'openrouter/free',
+      model: env.OPENROUTER_MODEL || 'google/gemma-4-31b-it:free',
       messages: [{ role: 'system', content: system }, ...messages],
       temperature,
       max_tokens: maxTokens
