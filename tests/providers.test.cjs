@@ -35,7 +35,7 @@ test('Groq transcribe y OpenRouter responde con el contrato CERCA',async()=>{
   assert.ok(calls[0].url.includes('groq.com'));
   assert.ok(calls[1].url.includes('openrouter.ai'));
   const request=JSON.parse(calls[1].opts.body);
-  assert.equal(request.model,'openrouter/free');
+  assert.equal(request.model,'google/gemma-4-31b-it:free');
   assert.ok(request.messages[0].content.includes('Nico'));
   assert.equal(request.messages.at(-1).content,'Recuerda que me gusta el té verde');
 });
