@@ -74,3 +74,19 @@ npm start
 Servidor local: `http://localhost:3000/api/health`; para Android con Expo se necesita túnel HTTPS. Las pruebas automatizadas usan respuestas simuladas de OpenRouter/Groq y **no consumen cuotas reales**.
 
 Cuando queramos una conversación continua con interrupciones naturales, migrar la capa de voz a streaming/audio en tiempo real; por ahora es pulsar → hablar → esperar → escuchar.
+
+## Diagnóstico de fallos en Upstash
+
+En Vercel > Settings > Environment Variables define `CERCA_DEBUG_LOGS=true`, aplica al entorno correcto (Production/Preview) y vuelve a desplegar. Abre **Vercel Logs**, realiza una interacción y busca el prefijo `[CERCA-API]` y su `requestId`.
+
+Eventos útiles:
+- `quota_config`: indica **solo si existen** URL, token y salt (sin mostrarlos).
+- `quota_upstash_request`: comenzó la solicitud de límites.
+- `quota_network_failure`: conexión/timeout a Upstash.
+- `quota_upstash_http_failure`: Upstash devolvió 401/403/404/429/500; comprueba REST URL, REST TOKEN, región y despliegue.
+- `quota_upstash_invalid_json` o `quota_upstash_invalid_result`: formato de respuesta incorrecto.
+- `quota_upstash_ok` y `quota_passed`: protección validada; luego se espera `groq_transcription_start`, `groq_transcription_ok` y `openrouter_response_start`.
+- `request_failed`: error con estado y código técnico.
+La respuesta incluye `requestId` en errores y el header `X-CERCA-Request-ID` para correlacionar con el dispositivo.
+
+Un `PING` exitoso desde PowerShell demuestra que **esa máquina** llega a Upstash, pero no que el despliegue actual de Vercel tenga las mismas variables. Nunca pegues tokens, audios ni respuestas completas de usuario en logs o tickets.
