@@ -124,3 +124,11 @@ No modifica `/api/voice-turn` ni `/api/companion` y tampoco altera SQLite.
 El backend nunca incluye los tokens de proveedores en los mensajes de error.
 Las transcripciones mal detectadas pueden ser señal de audio de baja calidad:
 Whisper ya recibe el idioma de conversación configurado en el perfil.
+
+## Gemini Live: voz continua
+
+La nueva ruta `POST /api/live-session` emite credenciales efímeras de **un solo uso** para Gemini Live, válidas por 60 segundos para conectar y 10 minutos de conversación. La app se conecta **directamente a Google** por WebSocket con la credencial temporal. La clave privada `GEMINI_API_KEY` nunca se incluye en la APK.
+
+La API reutiliza `checkQuota` (Upstash) antes de emitir el token: configure `GEMINI_API_KEY`, `GEMINI_LIVE_MODEL`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` y `RATE_LIMIT_SALT` en Vercel. Cada conexión consume una solicitud de cuota; además revise las cuotas y el costo por minuto de Gemini. **Los límites por IP no sustituyen la autenticación del usuario.** No distribuir la APK públicamente sin control de instalaciones y presupuesto.
+
+La app mantiene el modo `/api/voice-turn` (OpenRouter/Groq) como respaldo si Gemini Live está desactivado o sin cuota. La continuidad de memoria SQLite no cambia. La integración permite interrupciones, pero cancelación de eco y latencia necesitan pruebas en un dispositivo Android físico.
