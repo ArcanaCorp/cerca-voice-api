@@ -50,7 +50,7 @@ test('rechaza audio inválido y formatos no permitidos', () => {
 test('permite solicitudes de app conforme al contrato original', async () => {
   let seen;
   const handler = makeHandler({
-    env: { OPENAI_API_KEY: 'fake-key', VERCEL_ENV: 'development' },
+    env: { OPENROUTER_API_KEY: 'fake-key', GROQ_API_KEY: 'fake-groq-key', VERCEL_ENV: 'development' },
     checkQuota: async () => {},
     voiceTurn: async (input) => {
       seen = input;
@@ -66,7 +66,7 @@ test('permite solicitudes de app conforme al contrato original', async () => {
 
 test('falla cerrado en producción sin protección de consumo', async () => {
   const handler = makeHandler({
-    env: { OPENAI_API_KEY: 'fake-key', VERCEL_ENV: 'production' },
+    env: { OPENROUTER_API_KEY: 'fake-key', GROQ_API_KEY: 'fake-groq-key', VERCEL_ENV: 'production' },
     voiceTurn: async () => { throw Error('no debería alcanzar proveedor'); }
   });
   const res = response();

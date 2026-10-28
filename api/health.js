@@ -5,5 +5,5 @@ module.exports = function health(req, res) {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ status: 'error', message: 'Método no permitido.' });
   }
-  return res.status(200).json({ status: 'ok', service: 'cerca-voice-api', version: '1.0.0' });
+  return res.status(200).json({ status: 'ok', service: 'cerca-voice-api', version: '1.1.0' });
 };

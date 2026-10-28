@@ -1,6 +1,6 @@
 'use strict';
 const { ApiError, parseBody, authorize, checkQuota } = require('./guard.cjs');
-const { voiceTurn } = require('./openai.cjs');
+const { voiceTurn } = require('./voice-engine.cjs');
 
 function applyCors(req, res, env) {
   const origin = req.headers?.origin;
@@ -28,7 +28,7 @@ function makeHandler(dependencies = {}) {
       return res.status(405).json({ error: 'Método no permitido.', code: 'method_not_allowed' });
     }
     try {
-      if (!env.OPENAI_API_KEY) throw new ApiError(503, 'not_configured', 'API no configurada.');
+      if (!env.OPENROUTER_API_KEY || !env.GROQ_API_KEY) throw new ApiError(503, 'not_configured', 'Faltan credenciales de OpenRouter o Groq.');
       const input = parseBody(req.body);
       authorize(req, env);
       await rate(req, env, fetchFn);

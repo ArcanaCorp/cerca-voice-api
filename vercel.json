@@ -3,6 +3,9 @@
   "functions": {
     "api/voice-turn.js": {
       "maxDuration": 60
+    },
+    "api/companion.js": {
+      "maxDuration": 60
     }
   }
 }

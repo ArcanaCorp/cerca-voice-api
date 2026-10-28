@@ -3,6 +3,7 @@
 const http = require('node:http');
 const voice = require('./api/voice-turn.js');
 const health = require('./api/health.js');
+const companion = require('./api/companion.js');
 const PORT = Number(process.env.PORT) || 3000;
 
 const server = http.createServer(async (req, res) => {
@@ -22,6 +23,7 @@ const server = http.createServer(async (req, res) => {
   const route = req.url?.split('?')[0];
   if (route === '/api/health') return health(req, res);
   if (route === '/api/voice-turn') return voice(req, res);
+  if (route === '/api/companion') return companion(req, res);
   res.status(404).json({ error: 'Ruta inexistente.' });
 });
 server.listen(PORT, () => console.log(`CERCA API local en http://localhost:${PORT}`));
