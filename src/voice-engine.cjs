@@ -20,6 +20,9 @@ async function voiceTurn(input, options) {
   const reply = text(obj.reply, 900);
   if (!reply) throw new ApiError(502, 'empty_reply', 'La IA no respondió. Intenta nuevamente.');
   const memory = requestedRemember(transcript) ? redactMemoryCandidate(obj.memory) : '';
+  console.log(memory);
+  console.log({transcript, reply, memory});
+  
   return { transcript, reply, memory };
 }
 module.exports = { voiceTurn };
