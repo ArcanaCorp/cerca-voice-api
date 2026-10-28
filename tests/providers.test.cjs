@@ -196,3 +196,16 @@ test('puede responder en formato JSON aunque el modo texto natural esté habilit
   assert.equal(result.reply, 'Claro, cuéntame.');
   assert.equal(result.memory, 'Le gusta el té');
 });
+
+test('rechaza etiquetas de seguridad del router gratis', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{message:{content:'User Safety: safe\\nResponse Safety: safe'}}]
+    })
+  });
+  await assert.rejects(
+    () => requestJSON({system:'CERCA',messages:[],allowPlainText:true},{env,fetchFn}),
+    e => e.code === 'non_conversational_model'
+  );
+});
