@@ -21,6 +21,20 @@ function extractJSON(value) {
   throw new ApiError(502, 'bad_model_output', 'La IA no entregó JSON válido. Puedes reintentar.');
 }
 
+// Impide que un clasificador de seguridad se haga pasar por el compañero.
+function isClassificationOutput(value) {
+  if (typeof value !== 'string') return false;
+  return /^(?:user\s+safety|response\s+safety)\s*:/i.test(value.trim());
+}
+function assertConversationalOutput(value) {
+  if (isClassificationOutput(value)) {
+    throw new ApiError(
+      502, 'non_conversational_model',
+      'OpenRouter devolvió una clasificación en lugar de conversación. Selecciona un modelo de chat mediante OPENROUTER_MODEL.'
+    );
+  }
+}
+
 // Algunos modelos gratuitos responden con texto natural incluso al solicitar JSON.
 // El fallback aplica exclusivamente a conversaciones, nunca a la identidad del compañero.
 function extractSpokenText(value) {
@@ -32,6 +46,7 @@ function extractSpokenText(value) {
   }
 
   if (!spoken || spoken.length > 900) return null;
+  assertConversationalOutput(spoken);
 
   // Nunca verbalizar JSON roto, estructuras de datos ni instrucciones internas.
   if (/^[\[{]/.test(spoken) || /`{3}/.test(spoken)) return null;
@@ -57,6 +72,7 @@ function parseOutput(value, allowPlainText = false) {
   try {
     const structured = extractJSON(value);
     if (structured && typeof structured === 'object' && !Array.isArray(structured)) {
+      if (typeof structured.reply === 'string') assertConversationalOutput(structured.reply);
       return { output: structured, usedFallback: false };
     }
 
@@ -126,6 +142,13 @@ async function requestJSON(
     const choice = result.choices?.[0];
     const message = choice?.message;
     const content = normalizeMessageContent(message?.content);
+    const model = typeof result.model === 'string' ? result.model : '';
+    if (/(?:content[-_ ]?safety|moderation|rerank|guardrail)/i.test(model)) {
+      trace?.warn?.('non_conversational_model_selected', { model: model.slice(0, 100) });
+      throw new ApiError(502, 'non_conversational_model',
+        'OpenRouter seleccionó un modelo de clasificación. Configura OPENROUTER_MODEL con un modelo gratuito de chat.');
+    }
+    assertConversationalOutput(content);
     const metadata = {
       model: typeof result.model === 'string' ? result.model.slice(0, 100) : 'unknown',
       finishReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : 'unknown',
@@ -170,4 +193,4 @@ async function requestJSON(
   }
 }
 
-module.exports = { requestJSON, extractJSON, extractSpokenText, parseOutput };
+module.exports = { requestJSON, extractJSON, extractSpokenText, parseOutput, isClassificationOutput };
