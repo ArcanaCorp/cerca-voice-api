@@ -12,8 +12,9 @@ async function voiceTurn(input, options) {
   const obj = await requestJSON({
     system: makeInstructions(input),
     messages: [...input.history, { role: 'user', content: transcript }],
-    temperature: 0.85,
-    maxTokens: 450
+    temperature: 0.75,
+    maxTokens: 900,
+    allowPlainText: true
   }, options);
   options?.trace?.log('openrouter_response_ok');
   const reply = text(obj.reply, 900);
