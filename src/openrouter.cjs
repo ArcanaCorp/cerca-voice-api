@@ -136,7 +136,7 @@ async function requestJSON(
         // Sin secretos, contenido ni datos sensibles en logs.
         trace?.warn?.('openrouter_rate_limited', {
           scope: providerOrAccount,
-          retryAfterSeconds: /^\\d+$/.test(retryAfter || '') ? Math.min(Number(retryAfter), 86400) : null,
+          retryAfterSeconds: /^\d+$/.test(retryAfter || '') ? Math.min(Number(retryAfter), 86400) : null,
         });
         throw new ApiError(
           429, 'openrouter_rate_limited',
