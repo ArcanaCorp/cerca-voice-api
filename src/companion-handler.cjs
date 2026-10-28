@@ -1,6 +1,7 @@
 'use strict';
 const { ApiError, authorize, checkQuota } = require('./guard.cjs');
 const { cleanInput, createCompanion } = require('./companion.cjs');
+const { createTrace } = require('./diagnostics.cjs');
 
 function makeCompanionHandler(dependencies = {}) {
   const env = dependencies.env || process.env;
@@ -9,6 +10,8 @@ function makeCompanionHandler(dependencies = {}) {
   const produce = dependencies.createCompanion || createCompanion;
 
   return async function handler(req, res) {
+    const trace = createTrace('companion', req, res, env);
+    trace.log('request_received', { method: req.method });
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -34,16 +37,23 @@ function makeCompanionHandler(dependencies = {}) {
       }
       // La comprobación de cuotas es externa a los proveedores y aplica a los dos endpoints.
       const input = cleanInput(parsed);
+      trace.log('input_validated', { preference: input.preference, interestCount: input.user.interests.length });
       authorize(req, env);
-      await rate(req, env, fetchFn);
-      const result = await produce(input, { env, fetchFn });
+      trace.log('authorized');
+      await rate(req, env, fetchFn, trace);
+      trace.log('quota_passed');
+      trace.log('openrouter_companion_start');
+      const result = await produce(input, { env, fetchFn, trace });
+      trace.log('companion_ready', { interestCount: result?.interests?.length || 0 });
       return res.status(200).json(result);
     } catch (error) {
-      if (!(error instanceof ApiError)) console.error('Companion error:', error?.message);
+      trace.warn('request_failed', { status: error instanceof ApiError ? error.status : 502, code: error instanceof ApiError ? error.code : 'internal_error' });
+      if (!(error instanceof ApiError)) console.error('[CERCA-API] Unexpected companion failure', { requestId: trace.id, errorName: error?.name });
       const status = error instanceof ApiError ? error.status : 502;
       return res.status(status).json({
         error: error instanceof ApiError ? error.message : 'No pudimos crear al compañero.',
-        code: error instanceof ApiError ? error.code : 'internal_error'
+        code: error instanceof ApiError ? error.code : 'internal_error',
+        requestId: trace.id
       });
     }
   };

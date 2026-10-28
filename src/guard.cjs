@@ -90,16 +90,39 @@ function authorize(req, env = process.env) {
     throw new ApiError(401, 'unauthorized', 'Acceso no autorizado.');
   }
 }
-async function checkQuota(req, env = process.env, fetchFn = fetch) {
+async function checkQuota(req, env = process.env, fetchFn = fetch, trace) {
+  const log = (event, details = {}) => trace?.log?.(event, details);
+  const warn = (event, details = {}) => trace?.warn?.(event, details);
   const base = env.UPSTASH_REDIS_REST_URL;
   const token = env.UPSTASH_REDIS_REST_TOKEN;
+
+  log('quota_config', {
+    upstashUrlConfigured: Boolean(base),
+    upstashTokenConfigured: Boolean(token),
+    saltConfigured: Boolean(env.RATE_LIMIT_SALT),
+    environment: env.VERCEL_ENV || 'local',
+  });
+
   if (!base || !token) {
-    // No publicar un proxy anónimo con OPENAI_API_KEY sin un limitador persistente.
     if (env.VERCEL_ENV === 'production' && !env.API_ACCESS_TOKEN) {
+      warn('quota_missing_configuration', { missingUrl: !base, missingToken: !token });
       throw new ApiError(503, 'quota_not_configured', 'Aún no se configuró la protección contra abuso.');
     }
+    log('quota_skipped', { reason: 'development_or_server_token' });
     return;
   }
+
+  let upstashUrl;
+  try {
+    upstashUrl = new URL(base);
+    if (upstashUrl.protocol !== 'https:' || !upstashUrl.hostname) {
+      throw new Error('not_https');
+    }
+  } catch {
+    warn('quota_invalid_url', { message: 'UPSTASH_REDIS_REST_URL must be an HTTPS URL' });
+    throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.');
+  }
+
   const keyHash = crypto.createHash('sha256').update(`${env.RATE_LIMIT_SALT || ''}:${clientIp(req)}`).digest('hex').slice(0, 28);
   const perMinute = Math.max(1, Math.min(60, Number(env.REQUESTS_PER_MINUTE) || 10));
   const perDay = Math.max(1, Math.min(100000, Number(env.DAILY_REQUESTS_LIMIT) || 1000));
@@ -110,6 +133,8 @@ async function checkQuota(req, env = process.env, fetchFn = fetch) {
     ['INCR', `cerca:day:${day}`],
     ['EXPIRE', `cerca:day:${day}`, 86400]
   ];
+
+  log('quota_upstash_request', { minuteLimit: perMinute, dailyLimit: perDay });
   let response;
   try {
     response = await fetchFn(`${base.replace(/\/$/, '')}/pipeline`, {
@@ -118,12 +143,43 @@ async function checkQuota(req, env = process.env, fetchFn = fetch) {
       body: JSON.stringify(commands),
       signal: AbortSignal.timeout(5000)
     });
-  } catch { throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.'); }
-  if (!response.ok) throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.');
-  const rows = await response.json();
+  } catch (error) {
+    warn('quota_network_failure', {
+      kind: error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'timeout' : 'network',
+      errorName: typeof error?.name === 'string' ? error.name : 'unknown'
+    });
+    throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.');
+  }
+
+  if (!response.ok) {
+    warn('quota_upstash_http_failure', { httpStatus: response.status });
+    throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.');
+  }
+
+  let rows;
+  try {
+    rows = await response.json();
+  } catch {
+    warn('quota_upstash_invalid_json');
+    throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.');
+  }
+
   const minute = Number(rows?.[0]?.result);
   const daily = Number(rows?.[2]?.result);
-  if (!Number.isFinite(minute) || !Number.isFinite(daily)) throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.');
-  if (minute > perMinute || daily > perDay) throw new ApiError(429, 'rate_limited', 'Se alcanzó el límite de uso. Intenta más tarde.');
+  if (!Array.isArray(rows) || !Number.isFinite(minute) || !Number.isFinite(daily)) {
+    warn('quota_upstash_invalid_result', {
+      resultIsArray: Array.isArray(rows),
+      rowCount: Array.isArray(rows) ? rows.length : 0,
+      firstHasError: Boolean(rows?.[0]?.error),
+      thirdHasError: Boolean(rows?.[2]?.error)
+    });
+    throw new ApiError(503, 'rate_limit_unavailable', 'Protección temporalmente no disponible.');
+  }
+
+  log('quota_upstash_ok', { minute, daily, minuteLimit: perMinute, dailyLimit: perDay });
+  if (minute > perMinute || daily > perDay) {
+    warn('quota_exceeded', { minute, daily, minuteLimit: perMinute, dailyLimit: perDay });
+    throw new ApiError(429, 'rate_limited', 'Se alcanzó el límite de uso. Intenta más tarde.');
+  }
 }
 module.exports = { ApiError, parseBody, authorize, checkQuota, text };
