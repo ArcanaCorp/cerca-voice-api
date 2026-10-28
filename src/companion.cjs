@@ -1,6 +1,6 @@
 'use strict';
 const { ApiError, text } = require('./guard.cjs');
-const { requestJSON } = require('./openrouter.cjs');
+const { requestAIJSON } = require('./ai-provider.cjs');
 
 function cleanInput(body) {
   const p = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
@@ -70,7 +70,7 @@ async function createCompanion(input, options) {
     'Los valores mostrados son solo formato. INVÉNTALOS desde cero.',
   ].join('\n');
 
-  const result = await requestJSON({
+  const result = await requestAIJSON({
     system,
     messages: [{ role:'user', content: JSON.stringify({
       preference: chosen.preference,

@@ -1,7 +1,7 @@
 'use strict';
 const { ApiError, text } = require('./guard.cjs');
 const { makeInstructions, requestedRemember, redactMemoryCandidate } = require('./prompt.cjs');
-const { requestJSON } = require('./openrouter.cjs');
+const { requestAIJSON } = require('./ai-provider.cjs');
 const { transcribe } = require('./groq.cjs');
 
 async function voiceTurn(input, options) {
@@ -9,7 +9,7 @@ async function voiceTurn(input, options) {
   const transcript = await transcribe(input.audio, { ...options, language: input.user.language });
   options?.trace?.log('groq_transcription_ok', { transcriptChars: transcript.length });
   options?.trace?.log('openrouter_response_start');
-  const obj = await requestJSON({
+  const obj = await requestAIJSON({
     system: makeInstructions(input),
     messages: [...input.history, { role: 'user', content: transcript }],
     temperature: 0.75,
