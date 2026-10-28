@@ -129,13 +129,21 @@ async function requestJSON(
     });
 
     if (!response.ok) {
-      throw new ApiError(
-        response.status === 429 ? 429 : 502,
-        'openrouter_error',
-        response.status === 429
-          ? 'Se agotó temporalmente la cuota de OpenRouter.'
-          : 'OpenRouter no pudo responder.'
-      );
+      if (response.status === 429) {
+        const remaining = response.headers?.get?.('X-RateLimit-Remaining');
+        const retryAfter = response.headers?.get?.('Retry-After');
+        const providerOrAccount = remaining === '0' ? 'account_limit' : 'provider_or_account';
+        // Sin secretos, contenido ni datos sensibles en logs.
+        trace?.warn?.('openrouter_rate_limited', {
+          scope: providerOrAccount,
+          retryAfterSeconds: /^\\d+$/.test(retryAfter || '') ? Math.min(Number(retryAfter), 86400) : null,
+        });
+        throw new ApiError(
+          429, 'openrouter_rate_limited',
+          'OpenRouter alcanzó su límite gratuito o el modelo está saturado. Espera a que se restablezca la cuota.'
+        );
+      }
+      throw new ApiError(502, 'openrouter_error', 'OpenRouter no pudo responder.');
     }
 
     const result = await response.json();

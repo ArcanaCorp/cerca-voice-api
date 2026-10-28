@@ -100,3 +100,27 @@ Para conversaciones estables, configura `OPENROUTER_MODEL` con el **identificado
 Groq recibirá el idioma configurado por la persona (`es` o `en`) y una indicación breve del contexto lingüístico. Esto reduce detecciones erróneas de idioma, pero no garantiza una transcripción perfecta.
 
 Nunca imprimas el contenido de los mensajes en logs de producción. Los diagnósticos muestran únicamente códigos, tamaños y modelo seleccionado. La app filtra las etiquetas antiguas del contexto; pueden borrarse manualmente desde Settings.
+
+## Fallos de cuota gratuita (HTTP 429)
+
+OpenRouter puede limitar llamadas por minuto, por día o por saturación del proveedor.
+Consulta tu cuota en el panel de OpenRouter o con `GET https://openrouter.ai/api/v1/key`
+usando tu clave **desde una terminal privada**, nunca desde la APK.
+
+Para activar una alternativa de chat con Groq (además de la transcripción):
+```env
+GROQ_TEXT_FALLBACK_ENABLED=true
+GROQ_TEXT_MODEL=openai/gpt-oss-20b
+```
+Configura estas dos variables solo en **Vercel** y vuelve a desplegar. Este modelo
+GPT-OSS es open-weight alojado en Groq; no requiere saldo de la API de OpenAI.
+Groq tiene sus propias cuotas gratuitas y de pago según la cuenta.
+
+La API intenta OpenRouter una vez y, si el resultado falla por cuota,
+disponibilidad, clasificación o formato, intenta Groq **una sola vez**.
+Si Groq también falla, devuelve su error; no entra en un bucle de reintentos.
+No modifica `/api/voice-turn` ni `/api/companion` y tampoco altera SQLite.
+
+El backend nunca incluye los tokens de proveedores en los mensajes de error.
+Las transcripciones mal detectadas pueden ser señal de audio de baja calidad:
+Whisper ya recibe el idioma de conversación configurado en el perfil.
