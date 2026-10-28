@@ -3,6 +3,7 @@
 const http = require('node:http');
 const voice = require('./api/voice-turn.js');
 const health = require('./api/health.js');
+const live = require('./api/live-session.js');
 const companion = require('./api/companion.js');
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -23,6 +24,7 @@ const server = http.createServer(async (req, res) => {
   const route = req.url?.split('?')[0];
   if (route === '/api/health') return health(req, res);
   if (route === '/api/voice-turn') return voice(req, res);
+  if (route === '/api/live-session') return live(req, res);
   if (route === '/api/companion') return companion(req, res);
   res.status(404).json({ error: 'Ruta inexistente.' });
 });

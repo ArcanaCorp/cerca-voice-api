@@ -6,6 +6,9 @@
     },
     "api/companion.js": {
       "maxDuration": 60
+    },
+    "api/live-session.js": {
+      "maxDuration": 15
     }
   }
 }
