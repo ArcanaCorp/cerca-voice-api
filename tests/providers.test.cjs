@@ -72,3 +72,127 @@ test('Identidad de compañero rechaza género opuesto',()=>{
   assert.equal(validatePersonality(object,'male').name,'Nico');
   assert.throws(()=>validatePersonality(object,'female'),e=>e.status===502);
 });
+
+test('acepta texto natural del modelo gratuito solo en modo conversación', async () => {
+  const events = [];
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      model: 'free-test-model',
+      choices: [{
+        finish_reason: 'stop',
+        message: { content: 'Uy, qué buena historia. ¿Y qué pasó después?' }
+      }]
+    })
+  });
+  const options = {
+    env,
+    fetchFn,
+    trace: {
+      log: (event, data) => events.push({ event, data }),
+      warn: (event, data) => events.push({ event, data })
+    }
+  };
+  const result = await requestJSON({
+    system: 'Eres Nico',
+    messages: [{ role: 'user', content: 'Hola' }],
+    allowPlainText: true
+  }, options);
+
+  assert.deepEqual(result, {
+    reply: 'Uy, qué buena historia. ¿Y qué pasó después?',
+    memory: ''
+  });
+  assert.ok(events.some(({ event }) => event === 'openrouter_plain_text_fallback'));
+  assert.equal(events.find(({ event }) => event === 'openrouter_completion').data.contentChars > 0, true);
+
+  await assert.rejects(() => requestJSON({
+    system: 'Crea una identidad',
+    messages: [{ role: 'user', content: 'Amiga' }]
+  }, options), error => error.code === 'bad_model_output');
+});
+
+test('normaliza partes de texto del proveedor', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        finish_reason: 'stop',
+        message: {
+          content: [
+            { type: 'text', text: '{"reply":"¡Hola, aquí estoy!","memory":""}' }
+          ]
+        }
+      }]
+    })
+  });
+  const result = await requestJSON({
+    system: 'CERCA',
+    messages: [],
+    allowPlainText: true
+  }, { env, fetchFn });
+  assert.equal(result.reply, '¡Hola, aquí estoy!');
+});
+
+test('rechaza JSON truncado en lugar de leer una estructura rota', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        finish_reason: 'length',
+        message: { content: '{"reply":"hola","memory":' }
+      }]
+    })
+  });
+  await assert.rejects(() => requestJSON({
+    system: 'CERCA',
+    messages: [],
+    allowPlainText: true
+  }, { env, fetchFn }), error => error.code === 'bad_model_output');
+});
+
+test('identifica salida vacía de un modelo razonador sin revelar su contenido', async () => {
+  const events = [];
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      model: 'reasoner-free',
+      choices: [{
+        finish_reason: 'length',
+        message: { content: null, reasoning: 'texto interno no debe registrarse' }
+      }]
+    })
+  });
+  await assert.rejects(() => requestJSON({
+    system: 'CERCA',
+    messages: [],
+    allowPlainText: true
+  }, {
+    env,
+    fetchFn,
+    trace: { log: (event, data) => events.push([event, data]), warn: (event, data) => events.push([event, data]) }
+  }), error => error.code === 'empty_model_output');
+
+  const debug = JSON.stringify(events);
+  assert.ok(debug.includes('hasReasoning'));
+  assert.equal(debug.includes('texto interno'), false);
+});
+
+test('puede responder en formato JSON aunque el modo texto natural esté habilitado', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{
+        finish_reason: 'stop',
+        message: { content: '{"reply":"Claro, cuéntame.","memory":"Le gusta el té"}' }
+      }]
+    })
+  });
+  const result = await requestJSON({
+    system: 'CERCA',
+    messages: [],
+    allowPlainText: true
+  }, { env, fetchFn });
+  assert.equal(result.reply, 'Claro, cuéntame.');
+  assert.equal(result.memory, 'Le gusta el té');
+});
