@@ -209,3 +209,32 @@ test('rechaza etiquetas de seguridad del router gratis', async () => {
     e => e.code === 'non_conversational_model'
   );
 });
+
+test('rechaza modelos de moderacion del router incluso con texto', async () => {
+  const fetchFn = async () => ({
+    ok: true,
+    json: async () => ({
+      model: 'nvidia/nemotron-content-safety:free',
+      choices: [{message:{content:'safe'}}]
+    })
+  });
+  await assert.rejects(
+    () => requestJSON({system:'CERCA',messages:[],allowPlainText:true},{env,fetchFn}),
+    e => e.code === 'non_conversational_model'
+  );
+});
+
+test('transcripcion de Groq usa el idioma seleccionado', async () => {
+  const fetchFn = async (url, opts) => {
+    if (url.includes('groq.com')) {
+      assert.equal(opts.body.get('language'), 'es');
+      assert.ok(opts.body.get('prompt').includes('español'));
+      return {ok:true,json:async()=>({text:'Hola Clara, ¿cómo estás?'})};
+    }
+    return {ok:true,json:async()=>({
+      choices:[{message:{content:'{"reply":"¡Bien!","memory":""}'}}]
+    })};
+  };
+  const result = await voiceTurn(input(), {env,fetchFn});
+  assert.equal(result.transcript, 'Hola Clara, ¿cómo estás?');
+});
