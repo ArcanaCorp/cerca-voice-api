@@ -1,12 +1,14 @@
 {
   "name": "cerca-voice-api",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "API de voz sin memoria en servidor para CERCA",
-  "engines": { "node": ">=22" },
+  "description": "Motor de voz e identidad CERCA con OpenRouter y Groq (pruebas gratuitas)",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test tests/*.test.cjs",
     "start": "node local-server.cjs",
-    "check": "node --check api/voice-turn.js && node --check src/voice-handler.cjs && node --check src/openai.cjs && node --check src/guard.cjs"
+    "check": "node --check api/voice-turn.js && node --check api/companion.js && node --check src/voice-handler.cjs && node --check src/companion-handler.cjs && node --check src/openrouter.cjs && node --check src/groq.cjs && node --check src/companion.cjs && node --check src/voice-engine.cjs && node --check src/guard.cjs"
   }
 }

@@ -1,78 +1,68 @@
-# CERCA Voice API
+# CERCA Voice API — OpenRouter + Groq
 
-Servicio **independiente** para la app móvil CERCA de ARCANA CORP. Listo para desplegar como Vercel Functions con Node 22, sin login ni base de datos de conversaciones en el servidor.
-
-## ¿Qué hace?
-
-`POST /api/voice-turn` conserva **exactamente** el contrato que utiliza `src/services/voice.service.js` en la app:
-
-1. Recibe audio M4A en base64 (hasta 2.5 MB), perfil del usuario y personalidad persistente del compañero.
-2. Transcribe con `gpt-transcribe` de OpenAI.
-3. Envía una conversación breve y los recuerdos locales del dispositivo a un modelo de texto configurable (por defecto `gpt-4.1-mini`).
-4. Devuelve `{ "transcript": "...", "reply": "...", "memory": "..." }`.
-5. **No guarda audio, historial ni recuerdos en servidor**. Los devuelve a la app, que se encarga de persistirlos en SQLite y reproducir `reply` con `expo-speech`.
-
-Es un motor de voz **por turnos**, no una llamada bidireccional de baja latencia.
+Backend independiente para la app [CERCA](https://github.com/ArcanaCorp/cerca). Permite probar IA **sin recargar OpenAI**: usa OpenRouter (texto e identidad) y Groq Whisper (transcripción), sujetos a los límites gratuitos vigentes. La reproducción de voz usa `expo-speech` del dispositivo Android; no es una llamada en tiempo real.
 
 ## Endpoints
 
 | Método | Ruta | Uso |
 |---|---|---|
-| `GET` | `/api/health` | Salud del proceso; no verifica ni consume OpenAI |
-| `POST` | `/api/voice-turn` | Transcribir y responder |
+| GET | `/api/health` | Estado del servicio (no verifica la API externa) |
+| POST | `/api/companion` | Genera identidad de compañero: nombre, género, personalidad Big Five, intereses, humor y estilo |
+| POST | `/api/voice-turn` | Audio M4A/base64 → Groq → OpenRouter → texto de respuesta y recuerdo |
 
-Ejemplo conceptual de solicitud:
+### `POST /api/companion`
+
+Solicitud:
+
+```json
+{"preference":"random","user":{"name":"Ana","language":"es","interests":["arte","naturaleza"]}}
+```
+
+Respuesta (los valores son generados por IA, no prefijados):
 
 ```json
 {
-  "audio": "BASE64_M4A",
-  "mimeType": "audio/mp4",
-  "user": { "name": "Ana", "language": "es", "interests": ["Música"] },
-  "companion": { "name": "Lucas", "gender": "male", "personality": {"extraversion": 60}, "interests": ["Astronomía"], "humor": "Ingenioso", "communicationStyle": "Tranquilo" },
-  "memories": ["Le gusta el té verde"],
-  "history": [{"role":"assistant", "content":"¡Hola!"}]
+  "name":"nombre creado por la IA",
+  "gender":"female",
+  "personality":{"openness":70,"conscientiousness":58,"extraversion":51,"agreeableness":67,"neuroticism":34},
+  "interests":["fotografía","astronomía","cocina"],
+  "humor":"se ríe de las coincidencias inesperadas",
+  "communicationStyle":"curiosa, relajada y directa"
 }
 ```
 
-## Desplegar en Vercel
+La aplicación **guarda esta identidad localmente en SQLite una única vez** y la conserva en próximas aperturas. Para generar una nueva se debe eliminar el perfil anterior con el consentimiento correspondiente.
 
-1. Crear un repositorio privado nuevo, preferiblemente `ArcanaCorp/cerca-voice-api`, y subir **estos archivos** (ver comandos al final).
-2. En [vercel.com/new](https://vercel.com/new), importar el repositorio. Framework: **Other**, directorio raíz: `/`. No requiere comando de build.
-3. En **Settings → Environment Variables** del proyecto, agregar:
+### `POST /api/voice-turn`
 
-   - `OPENAI_API_KEY`: clave secreta de la API (solamente servidor).
-   - `OPENAI_TRANSCRIPTION_MODEL`: `gpt-transcribe` (opcional).
-   - `OPENAI_TEXT_MODEL`: `gpt-4.1-mini` (opcional).
-   - `UPSTASH_REDIS_REST_URL` y `UPSTASH_REDIS_REST_TOKEN`: **obligatorios para uso móvil sin autenticación en producción**; guardan contadores de abuso, **no conversaciones**. Crear una base Redis HTTP con Upstash y copiar sus credenciales.
-   - `RATE_LIMIT_SALT`: cadena aleatoria privada; opcional pero recomendada para no usar el IP bruto en los contadores.
-   - `REQUESTS_PER_MINUTE`: `10` (por IP, opcional).
-   - `DAILY_REQUESTS_LIMIT`: `1000` (límite global, opcional).
+Se mantiene compatible con la app: JSON con `audio` (M4A base64), `mimeType: "audio/mp4"`, `user`, `companion`, `history` y `memories`.
 
-4. Desplegar. Abrir `https://TU-API.vercel.app/api/health`; debe devolver `status: ok`. **Esto no valida las credenciales de OpenAI**.
-5. En CERCA (app Expo), crear `.env.local`:
+Respuesta: `{"transcript":"...","reply":"...","memory":""}`. Solo devuelve hechos a recordar cuando la persona lo pide explícitamente. El servidor no almacena conversaciones, audios ni recuerdos.
 
-```env
-EXPO_PUBLIC_CERCA_API_URL=https://TU-API.vercel.app
-```
+## Configurar en Vercel
 
-6. Ejecutar `npx expo start --clear` y probar una conversación de hasta 20 segundos en Android.
+1. Importar este repositorio en [Vercel](https://vercel.com/new) como **Other**, Node.js 22, raíz del proyecto, sin comando de build.
+2. Crear una clave en [OpenRouter](https://openrouter.ai/settings/keys) y otra en [Groq](https://console.groq.com/keys).
+3. Añadir variables de entorno privadas en el proyecto Vercel:
+   - `OPENROUTER_API_KEY`: clave secreta de OpenRouter.
+   - `OPENROUTER_MODEL=openrouter/free`: modelos gratuitos, sujetos a disponibilidad.
+   - `GROQ_API_KEY`: clave de Groq.
+   - `GROQ_WHISPER_MODEL=whisper-large-v3-turbo`.
+   - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `RATE_LIMIT_SALT`: protección de consumo en producción anónima. Solo guarda contadores, no conversaciones.
+   - `REQUESTS_PER_MINUTE=8`, `DAILY_REQUESTS_LIMIT=45` (ajustables a las cuotas vigentes).
+4. Desplegar. Probar `https://tu-proyecto.vercel.app/api/health`.
+5. En la app `ArcanaCorp/cerca` configurar **solo** `EXPO_PUBLIC_CERCA_API_URL=https://tu-proyecto.vercel.app` (sin `/api` al final). Reiniciar Expo.
+6. Completar onboarding, aceptar autorización de identidad y de audio por separado, y probar conversación.
 
-La URL de Vercel **no debe llevar `/api`** al final: la app concatena `/api/voice-turn` automáticamente.
+**Importante:** configura primero el backend y verifica las cuotas reales de los proveedores. Si no hay contadores Upstash configurados en producción y no se usa token de servidor, la API responde 503 a propósito para evitar gastos por abuso.
 
-## Seguridad y privacidad
+No guardar `OPENROUTER_API_KEY` ni `GROQ_API_KEY` dentro de `EXPO_PUBLIC_*`, código cliente o APK. El dominio de Vercel y CORS **no autentican** un dispositivo móvil. Antes de distribuir, habilitar autenticación/atestación de instalaciones y límites efectivos por consumidor; Upstash ayuda pero no es una defensa suficiente por sí sola.
 
-- **Jamás** pongas `OPENAI_API_KEY` en Expo, `EXPO_PUBLIC_*`, APK ni un repositorio público.
-- CORS y la URL no autentican una app móvil. El servicio permite llamadas anónimas desde dispositivos porque CERCA todavía no tiene cuentas. La protección incluida en producción son **cuotas persistentes por IP y cuota diaria global** a través de Upstash. Cuando no estén configuradas, la API **responde 503**, en vez de permitir consumo ilimitado. Estos límites reducen el riesgo económico, pero no reemplazan autenticación robusta ni atestación de dispositivos.
-- `API_ACCESS_TOKEN` es solo para clientes de servidor en pruebas internas; **no lo incrustes dentro de la APK**. Con token configurado, Vercel acepta esa autenticación, pero sigue siendo necesario establecer límites de gasto/cupos del proveedor.
-- El modelo recibe el contexto enviado por la app; ninguna información de conversación queda guardada en esta API. La solicitud **sí pasa por Vercel y OpenAI**, sujetos a su propio tratamiento y retención. `store: false` deshabilita el guardado de estado de Responses, pero no garantiza retención cero.
-- El audio no persiste en este servidor, solo se mantiene en memoria durante el proceso. La app móvil se encarga de borrar los archivos temporales.
-- Los recuerdos propuestos por el modelo se filtran y solo se devuelven si la persona pide explícitamente recordarlos; las restricciones automáticas no son una garantía absoluta contra información sensible.
-- Límite de carga: aproximadamente 2.5 MB de audio y 3.4 MB en base64, dentro del límite de 4.5 MB para cuerpos de Vercel.
-- Antes del lanzamiento público, considerar cuentas, App Attest/Play Integrity o autenticación de instalación, límites por usuario, monitoreo de costos y una política de privacidad/consentimiento final.
+Las solicitudes son procesadas por Vercel y los proveedores externos según sus políticas de privacidad/retención. Las cuentas gratis pueden tener condiciones distintas de las de pago; obtenemos consentimiento antes de enviar información. La memoria y personalidad se guardan en SQLite local **sin cifrar** todavía.
 
-## Desarrollo local y pruebas
+## Pruebas locales
 
-Node >=22. No se necesitan dependencias externas.
+Requiere Node.js 22 o posterior y no necesita dependencias npm de terceros.
 
 ```bash
 npm ci
@@ -81,34 +71,6 @@ npm test
 npm start
 ```
 
-Abre `http://localhost:3000/api/health`. Para probar llamadas de voz reales localmente, define `OPENAI_API_KEY` en el entorno de terminal y envía una solicitud de audio válida. La app Expo exige URL HTTPS: utiliza un túnel de desarrollo HTTPS, **no HTTP**, para probar desde un teléfono.
+Servidor local: `http://localhost:3000/api/health`; para Android con Expo se necesita túnel HTTPS. Las pruebas automatizadas usan respuestas simuladas de OpenRouter/Groq y **no consumen cuotas reales**.
 
-## Crear el nuevo repositorio en GitHub
-
-Desde la carpeta que contiene estos archivos, crea un repositorio privado vacío `cerca-voice-api` en la organización `ArcanaCorp` (sin README ni licencia iniciales). Luego:
-
-```bash
-git init -b main
-git add .
-git commit -m "feat: initial CERCA voice API"
-git remote add origin https://github.com/ArcanaCorp/cerca-voice-api.git
-git push -u origin main
-```
-
-**No es necesario subir la carpeta del proyecto móvil al servidor**. Solo este repositorio se conecta a Vercel.
-
-## Componentes
-
-```text
-api/
-  health.js                 Verifica que el servicio responda
-  voice-turn.js             Endpoint móvil compatible
-src/
-  guard.cjs                 Validación, control de cuota y autorización opcional
-  prompt.cjs                Personalidad y reglas de recuerdo
-  openai.cjs                Transcripción + Responses
-  voice-handler.cjs         Orquestación sin estado
-tests/                      Pruebas automáticas con mocks
-.github/workflows/tests.yml CI GitHub Actions
-vercel.json                  Configuración función
-```
+Cuando queramos una conversación continua con interrupciones naturales, migrar la capa de voz a streaming/audio en tiempo real; por ahora es pulsar → hablar → esperar → escuchar.
